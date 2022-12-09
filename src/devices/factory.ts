@@ -1,33 +1,11 @@
-import { DeviceConfig, PlatformAccessory } from '../platform'
 import { API, Logger } from 'homebridge'
-import { Model } from './models'
 import { Toothbrush } from './toothbrush'
-import { Scanner } from '../scanner'
+import { DeviceConfig, DeviceType } from './index'
 
-export interface Device {
-    configureAccessory(accessory: PlatformAccessory): void
-}
-
-export const createDevice = (
-    model: Model,
-    options: DeviceConfig,
-    scanner: Scanner,
-    log: Logger,
-    api: API
-) => {
-    if (model === 'toothbrush') {
-        return new Toothbrush(options, scanner, log, api)
+export const createDevice = (type: DeviceType, config: DeviceConfig, log: Logger, api: API) => {
+    if (type === 'toothbrush') {
+        return new Toothbrush(config, log, api)
     }
 
-    throw new DeviceError(`Unsupported humidifier model "${model}"`)
-}
-
-export class DeviceError extends Error {
-    public cause?: Error
-
-    constructor(message: string, cause?: Error) {
-        super(message)
-
-        this.cause = cause
-    }
+    throw new Error(`Unsupported model type "${type}"`)
 }

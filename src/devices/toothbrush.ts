@@ -1,27 +1,31 @@
-import { Device } from './factory'
-import { DeviceConfig, PlatformAccessory } from '../platform'
 import { API, Logger } from 'homebridge'
-import { Scanner } from '../scanner'
-import { Peripheral } from '@abandonware/noble'
+import { Device, DeviceConfig } from './index'
+import { PlatformAccessory } from '../platform'
+import { Bluetooth } from '../providers/bluetooth'
+
+interface ToothbrushProps {
+    battery: number
+    deviceNumber: string
+}
 
 export class Toothbrush implements Device {
+    private provider: Bluetooth<ToothbrushProps>
     constructor(
         private readonly config: DeviceConfig,
-        private readonly scanner: Scanner,
         private readonly log: Logger,
         private readonly api: API
     ) {
-        scanner.on(config.address, this.update.bind(this))
+        this.provider = new Bluetooth(config.uuid, log)
+        this.provider.addProp({
+            name: 'deviceNumber',
+            serviceUUID: '180a',
+            characteristicUUID: '2a24',
+            executor: (buffer) => buffer.toString()
+        })
     }
 
-    async update(peripheral: Peripheral) {
-        const { characteristics } = await peripheral.discoverSomeServicesAndCharacteristicsAsync(
-            [peripheral.uuid],
-            ['2a19']
-        )
-        const batteryLevel = (await characteristics[0].readAsync())[0]
-
-        this.log.warn(`${peripheral.address} (${peripheral.advertisement.localName}): ${batteryLevel}%`)
+    async update() {
+        // await this.provider.getProps()
     }
 
     configureAccessory(accessory: PlatformAccessory): void {}

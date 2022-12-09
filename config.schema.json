@@ -14,10 +14,10 @@
             "description": "This is the name the toothbrush will use in HomeKit",
             "required": true
           },
-          "address": {
+          "uuid": {
             "type": "string",
-            "title": "MAC Address",
-            "placeholder": "00:00:00:00:00:00",
+            "title": "UUID",
+            "placeholder": "123e4567-e89b-12d3-a456-426614174000",
             "required": true
           },
           "disabled": {
@@ -25,8 +25,8 @@
             "type": "boolean",
             "default": false
           },
-          "model": {
-            "title": "Model",
+          "type": {
+            "title": "Type device",
             "type": "string",
             "enum": [
               "toothbrush"

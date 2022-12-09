@@ -9,22 +9,11 @@ import {
 } from 'homebridge'
 
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings'
-import { createDevice, Device } from './devices/factory'
-import { Model } from './devices/models'
-import { Scanner } from './scanner'
-
-export type DeviceOptions = {}
-
-export type DeviceConfig = {
-    name: string
-    address: string
-    updateInterval: number
-    disabled: boolean
-    model: Model
-} & DeviceOptions
+import { createDevice } from './devices/factory'
+import { Device, DeviceConfig } from './devices'
 
 export type AccessoryContext = {
-    address: string
+    uuid: string
 }
 
 type PlatformConfig = {
@@ -41,16 +30,14 @@ export class MiOcleanPlatform implements DynamicPlatformPlugin {
     public readonly accessories: Map<string, PlatformAccessory>
     public readonly devices: Map<string, Device>
 
-    public readonly config: PlatformConfigBase
+    public readonly config: PlatformConfig & PlatformConfigBase
     public readonly log: Logger
-    public readonly scanner: Scanner
 
     constructor(log: Logger, config: PlatformConfigBase, public readonly api: API) {
         this.log = log
         this.config = config as PlatformConfig
         this.accessories = new Map()
         this.devices = new Map()
-        this.scanner = new Scanner(log)
 
         this.log.debug('Finished initializing platform:', this.config.name)
         this.api.on('didFinishLaunching', this.didFinishLaunching.bind(this))
@@ -59,7 +46,7 @@ export class MiOcleanPlatform implements DynamicPlatformPlugin {
     configureAccessory(accessory: PlatformAccessory): void {
         this.log.info('Loading accessory from cache:', accessory.displayName)
 
-        this.accessories.set(accessory.context.address, accessory)
+        this.accessories.set(accessory.context.uuid, accessory)
     }
 
     async didFinishLaunching(): Promise<void> {
@@ -70,7 +57,7 @@ export class MiOcleanPlatform implements DynamicPlatformPlugin {
 
         for (const config of this.config.devices) {
             if (config.disabled) {
-                const accessory = this.accessories.get(config.address)
+                const accessory = this.accessories.get(config.uuid)
 
                 if (accessory) {
                     this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory])
@@ -78,12 +65,12 @@ export class MiOcleanPlatform implements DynamicPlatformPlugin {
                 continue
             }
 
-            const { name, address, model } = config
+            const { name, uuid, type } = config
 
             let device: Device
 
             try {
-                device = createDevice(model, config, this.scanner, this.log, this.api)
+                device = createDevice(type, config, this.log, this.api)
             } catch (err) {
                 this.log.error(`Fail to initialize oclean device. ${err}`)
                 continue
@@ -91,32 +78,31 @@ export class MiOcleanPlatform implements DynamicPlatformPlugin {
 
             let accessory: PlatformAccessory
 
-            if (this.accessories.has(address)) {
-                accessory = this.accessories.get(address)!
+            if (this.accessories.has(uuid)) {
+                accessory = this.accessories.get(uuid)!
             } else {
-                this.log.info(`Registering new device with MAC "${address}".`)
+                this.log.info(`Registering new device with UUID "${uuid}".`)
 
-                accessory = new this.api.platformAccessory(name, this.api.hap.uuid.generate(address))
-                accessory.context = { address }
+                accessory = new this.api.platformAccessory(name, this.api.hap.uuid.generate(uuid))
+                accessory.context = { uuid }
 
                 this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory])
             }
 
             device.configureAccessory(accessory)
 
-            this.devices.set(address, device)
-            this.scanner.addAddress(address)
+            this.devices.set(uuid, device)
 
-            const update = this.update(address)
+            const update = this.update(uuid)
             setInterval(update, config.updateInterval * 1000 || 30000)
 
             await update()
         }
 
-        this.accessories.forEach((accessory, address) => {
-            if (!this.config.devices.find((it) => it.address === address)) {
+        this.accessories.forEach((accessory, uuid) => {
+            if (!this.config.devices.find((it) => it.uuid === uuid)) {
                 this.log.warn(
-                    `Unregistering device with MAC "${address}" because it wasn't found in config.json`
+                    `Unregistering device with MAC "${uuid}" because it wasn't found in config.json`
                 )
 
                 this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory])
@@ -124,19 +110,19 @@ export class MiOcleanPlatform implements DynamicPlatformPlugin {
         })
     }
 
-    private update(address: string): () => Promise<void> {
+    private update(uuid: string): () => Promise<void> {
         return async () => {
-            const device = this.devices.get(address)
+            const device = this.devices.get(uuid)
 
             if (!device) {
-                this.log.warn(`Can't find Oclean device object for the device with MAC "${address}".`)
+                this.log.warn(`Can't find Oclean device object for the device with UUID "${uuid}".`)
                 return
             }
 
             try {
-                await this.scanner.start()
+                device.update()
             } catch (err) {
-                this.log.error(`Fail to update characteristics of the device with MAC "${address}".`)
+                this.log.error(`Fail to update characteristics of the device with UUID "${uuid}".`)
             }
         }
     }

@@ -9,6 +9,7 @@ lerna-debug.log*
 /dist/*.map
 /dist/**/*.ts
 /dist/**/*.map
+/build
 
 .vscode/*
 !.vscode/extensions.json
