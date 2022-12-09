@@ -1,15 +1,44 @@
 {
-  "pluginAlias": "ExampleHomebridgePlugin",
+  "pluginAlias": "MiOclean",
   "pluginType": "platform",
   "singular": true,
   "schema": {
-    "type": "object",
-    "properties": {
-      "name": {
-        "title": "Name",
-        "type": "string",
-        "required": true,
-        "default": "Example Dynamic Platform"
+    "devices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Toothbrush Name",
+            "description": "This is the name the toothbrush will use in HomeKit",
+            "required": true
+          },
+          "address": {
+            "type": "string",
+            "title": "MAC Address",
+            "placeholder": "00:00:00:00:00:00",
+            "required": true
+          },
+          "disabled": {
+            "title": "Disable the device",
+            "type": "boolean",
+            "default": false
+          },
+          "model": {
+            "title": "Model",
+            "type": "string",
+            "enum": [
+              "toothbrush"
+            ],
+            "default": "toothbrush"
+          },
+          "updateInterval": {
+            "title": "Parameters update interval",
+            "type": "number",
+            "default": 21600
+          }
+        }
       }
     }
   }
