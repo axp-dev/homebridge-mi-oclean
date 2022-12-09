@@ -11,6 +11,7 @@ import {
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings'
 import { createDevice, Device } from './devices/factory'
 import { Model } from './devices/models'
+import { Scanner } from './scanner'
 
 export type DeviceOptions = {}
 
@@ -42,12 +43,14 @@ export class MiOcleanPlatform implements DynamicPlatformPlugin {
 
     public readonly config: PlatformConfigBase
     public readonly log: Logger
+    public readonly scanner: Scanner
 
     constructor(log: Logger, config: PlatformConfigBase, public readonly api: API) {
         this.log = log
         this.config = config as PlatformConfig
         this.accessories = new Map()
         this.devices = new Map()
+        this.scanner = new Scanner(log)
 
         this.log.debug('Finished initializing platform:', this.config.name)
         this.api.on('didFinishLaunching', this.didFinishLaunching.bind(this))
@@ -75,12 +78,12 @@ export class MiOcleanPlatform implements DynamicPlatformPlugin {
                 continue
             }
 
-            const { name, address, model, ...options } = config
+            const { name, address, model } = config
 
             let device: Device
 
             try {
-                device = await createDevice(name, address, model, options, this.log, this.api)
+                device = createDevice(model, config, this.scanner, this.log, this.api)
             } catch (err) {
                 this.log.error(`Fail to initialize oclean device. ${err}`)
                 continue
@@ -102,6 +105,7 @@ export class MiOcleanPlatform implements DynamicPlatformPlugin {
             device.configureAccessory(accessory)
 
             this.devices.set(address, device)
+            this.scanner.addAddress(address)
 
             const update = this.update(address)
             setInterval(update, config.updateInterval * 1000 || 30000)
@@ -130,7 +134,7 @@ export class MiOcleanPlatform implements DynamicPlatformPlugin {
             }
 
             try {
-                await device.update()
+                await this.scanner.start()
             } catch (err) {
                 this.log.error(`Fail to update characteristics of the device with MAC "${address}".`)
             }

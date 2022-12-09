@@ -7,13 +7,15 @@ exports.Scanner = void 0;
 const noble_1 = __importDefault(require("@abandonware/noble"));
 const events_1 = require("events");
 class Scanner extends events_1.EventEmitter {
-    constructor(log, address) {
-        var _a;
+    constructor(log) {
         super();
+        this.addresses = [];
         this.log = log;
-        this.address = address.replace(':', '').toLowerCase();
-        this.log.debug((_a = process.env.inspect) !== null && _a !== void 0 ? _a : 'no env');
+        this.stackWaitAddresses = new Set();
         this.registerEvents();
+    }
+    addAddress(address) {
+        this.addresses.push(this.normalizeAddress(address));
     }
     registerEvents() {
         noble_1.default.on('discover', this.onDiscover.bind(this));
@@ -22,10 +24,11 @@ class Scanner extends events_1.EventEmitter {
         noble_1.default.on('warning', this.onWarning.bind(this));
         noble_1.default.on('stateChange', this.onStateChange.bind(this));
     }
-    start() {
+    async start() {
         try {
             this.log.debug('Scanning...');
-            noble_1.default.startScanning([], true);
+            this.addresses.forEach((address) => this.stackWaitAddresses.add(this.normalizeAddress(address)));
+            await noble_1.default.startScanningAsync([], true);
         }
         catch (error) {
             this.emit('error', error);
@@ -36,15 +39,15 @@ class Scanner extends events_1.EventEmitter {
     }
     async onDiscover(peripheral) {
         if (peripheral.address) {
-            if (peripheral.address.replace(':', '').toLowerCase() == this.address) {
+            const normalizeAddress = this.normalizeAddress(peripheral.address);
+            if (this.stackWaitAddresses.has(normalizeAddress)) {
                 this.log.debug('device found: ' + peripheral.address);
-                const serviceData = peripheral.advertisement.serviceData;
-                for (const j in serviceData) {
-                    let b = serviceData[j].data;
-                    this.emit('updateValues', ...b.values());
-                    this.stop();
-                }
+                this.emit(peripheral.address, peripheral);
+                this.stackWaitAddresses.delete(normalizeAddress);
             }
+        }
+        if (this.stackWaitAddresses.size === 0) {
+            this.stop();
         }
     }
     onScanStart() {
@@ -64,11 +67,8 @@ class Scanner extends events_1.EventEmitter {
             noble_1.default.stopScanning();
         }
     }
-    onNotify(state) {
-        this.log.debug('Characteristics notification received.');
-    }
-    onDisconnect() {
-        this.log.debug(`Disconnected.`);
+    normalizeAddress(address) {
+        return address.replace(':', '').toLowerCase();
     }
 }
 exports.Scanner = Scanner;

@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.MiOcleanPlatform = void 0;
 const settings_1 = require("./settings");
 const factory_1 = require("./devices/factory");
+const scanner_1 = require("./scanner");
 class MiOcleanPlatform {
     constructor(log, config, api) {
         this.api = api;
@@ -12,6 +13,7 @@ class MiOcleanPlatform {
         this.config = config;
         this.accessories = new Map();
         this.devices = new Map();
+        this.scanner = new scanner_1.Scanner(log);
         this.log.debug('Finished initializing platform:', this.config.name);
         this.api.on('didFinishLaunching', this.didFinishLaunching.bind(this));
     }
@@ -32,10 +34,10 @@ class MiOcleanPlatform {
                 }
                 continue;
             }
-            const { name, address, model, ...options } = config;
+            const { name, address, model } = config;
             let device;
             try {
-                device = await (0, factory_1.createDevice)(name, address, model, options, this.log, this.api);
+                device = (0, factory_1.createDevice)(model, config, this.scanner, this.log, this.api);
             }
             catch (err) {
                 this.log.error(`Fail to initialize oclean device. ${err}`);
@@ -53,6 +55,7 @@ class MiOcleanPlatform {
             }
             device.configureAccessory(accessory);
             this.devices.set(address, device);
+            this.scanner.addAddress(address);
             const update = this.update(address);
             setInterval(update, config.updateInterval * 1000 || 30000);
             await update();
@@ -72,7 +75,7 @@ class MiOcleanPlatform {
                 return;
             }
             try {
-                await device.update();
+                await this.scanner.start();
             }
             catch (err) {
                 this.log.error(`Fail to update characteristics of the device with MAC "${address}".`);

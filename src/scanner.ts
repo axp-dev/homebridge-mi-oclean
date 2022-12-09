@@ -1,20 +1,24 @@
-import { Logging } from 'homebridge'
-import noble from '@abandonware/noble'
+import { Logger } from 'homebridge'
+import noble, { Peripheral, startScanningAsync } from '@abandonware/noble'
 import { EventEmitter } from 'events'
+import { DeviceConfig } from './platform'
+import { Device } from './devices/factory'
 
 export class Scanner extends EventEmitter {
-    private readonly log: Logging
+    private readonly log: Logger
+    private readonly addresses: string[] = []
+    private stackWaitAddresses: Set<string>
 
-    private readonly address: string
-
-    constructor(log: Logging, address: string) {
+    constructor(log: Logger) {
         super()
 
         this.log = log
-        this.address = address.replace(':', '').toLowerCase()
-        this.log.debug(process.env.inspect ?? 'no env')
-
+        this.stackWaitAddresses = new Set()
         this.registerEvents()
+    }
+
+    addAddress(address: string) {
+        this.addresses.push(this.normalizeAddress(address))
     }
 
     registerEvents() {
@@ -25,10 +29,11 @@ export class Scanner extends EventEmitter {
         noble.on('stateChange', this.onStateChange.bind(this))
     }
 
-    start() {
+    async start() {
         try {
             this.log.debug('Scanning...')
-            noble.startScanning([], true)
+            this.addresses.forEach((address) => this.stackWaitAddresses.add(this.normalizeAddress(address)))
+            await noble.startScanningAsync([], true)
         } catch (error) {
             this.emit('error', error)
         }
@@ -38,35 +43,35 @@ export class Scanner extends EventEmitter {
         noble.stopScanning()
     }
 
-    async onDiscover(peripheral) {
+    async onDiscover(peripheral: Peripheral) {
         if (peripheral.address) {
-            if (peripheral.address.replace(':', '').toLowerCase() == this.address) {
+            const normalizeAddress = this.normalizeAddress(peripheral.address)
+
+            if (this.stackWaitAddresses.has(normalizeAddress)) {
                 this.log.debug('device found: ' + peripheral.address)
-                const serviceData = peripheral.advertisement.serviceData
-                for (const j in serviceData) {
-                    let b = serviceData[j].data
-
-                    this.emit('updateValues', ...b.values())
-
-                    this.stop()
-                }
+                this.emit(peripheral.address, peripheral)
+                this.stackWaitAddresses.delete(normalizeAddress)
             }
+        }
+
+        if (this.stackWaitAddresses.size === 0) {
+            this.stop()
         }
     }
 
-    onScanStart() {
+    onScanStart(): void {
         this.log.debug('Started scanning.')
     }
 
-    onScanStop() {
+    onScanStop(): void {
         this.log.debug('Stopped scanning.')
     }
 
-    onWarning(message) {
+    onWarning(message: string): void {
         this.log.warn('Warning: ', message)
     }
 
-    onStateChange(state) {
+    onStateChange(state: string): void {
         if (state === 'poweredOn') {
             noble.startScanning([], true)
         } else {
@@ -74,11 +79,7 @@ export class Scanner extends EventEmitter {
         }
     }
 
-    onNotify(state) {
-        this.log.debug('Characteristics notification received.')
-    }
-
-    onDisconnect() {
-        this.log.debug(`Disconnected.`)
+    private normalizeAddress(address: string): string {
+        return address.replace(':', '').toLowerCase()
     }
 }
